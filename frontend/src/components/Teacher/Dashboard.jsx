@@ -331,6 +331,27 @@ export default function TeacherDashboard() {
                                 <option value="java">Java</option>
                             </select>
 
+                            {/* End Session button */}
+                            <button
+                                onClick={async () => {
+                                    if (window.confirm('Are you sure you want to end this session? This will disconnect all students.')) {
+                                        try {
+                                            await sessionsAPI.end(sessionCode);
+                                            navigate('/dashboard');
+                                        } catch (error) {
+                                            console.error('Failed to end session:', error);
+                                            alert('Failed to end session');
+                                        }
+                                    }
+                                }}
+                                className="btn bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                </svg>
+                                End Session
+                            </button>
+
                             {/* Back button */}
                             <button
                                 onClick={() => navigate('/dashboard')}

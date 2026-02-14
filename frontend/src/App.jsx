@@ -10,6 +10,7 @@ import JoinSession from './components/Student/JoinSession'
 import Header from './components/Common/Header'
 import StudentDashboard from './components/Student/Dashboard'
 import TeacherSettings from './components/Teacher/TeacherSettings'
+import Footer from './components/Common/Footer'
 
 function App() {
     const { user, loading } = useAuth()
@@ -31,9 +32,9 @@ function App() {
     }
 
     return (
-        <div className="min-h-screen">
+        <div className="min-h-screen flex flex-col bg-[#0f111a]">
             {user && <Header />}
-            <main className={user ? 'pt-16' : ''}>
+            <main className={`flex-grow ${user ? 'pt-16' : ''}`}>
                 <Routes>
                     {/* Public routes */}
                     <Route
@@ -101,6 +102,7 @@ function App() {
                     />
                 </Routes>
             </main>
+            <Footer />
         </div>
     )
 }

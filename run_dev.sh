@@ -15,10 +15,16 @@ cleanup() {
     exit
 }
 
-# Trap Ctrl+C
-trap cleanup SIGINT
+# Trap Ctrl+C and termination signals
+trap cleanup SIGINT SIGTERM
 
 # Start Backend
+# Export environment variables for local development
+export DATABASE_URL="sqlite:///db.sqlite3"
+export DJANGO_SECRET_KEY="django-insecure-dev-key"
+export DEBUG="True"
+export ALLOWED_HOSTS="localhost,127.0.0.1,0.0.0.0"
+
 echo -e "${GREEN}Starting Backend (Django)...${NC}"
 source venv/bin/activate
 python backend/manage.py runserver 0.0.0.0:8001 &
