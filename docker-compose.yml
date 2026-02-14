@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: consoleshare-backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=False
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///db.sqlite3}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:80}
+    volumes:
+      - backend_data:/app/data
+      - backend_static:/app/staticfiles
+    ports:
+      - "8000:8000"
+    networks:
+      - consoleshare-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/auth/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: consoleshare-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - consoleshare-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: consoleshare-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=consoleshare_user
+      - POSTGRES_PASSWORD=consoleshare_password
+      - POSTGRES_DB=consoleshare
+      - POSTGRES_HOST_AUTH_METHOD=trust # Allow local connection if password fails
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432" # Bind to localhost only for security with trust auth
+    networks:
+      - consoleshare-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consoleshare_user -d consoleshare"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  consoleshare-network:
+    driver: bridge
+
+volumes:
+  backend_data:
+  backend_static:
+  postgres_data:
