@@ -106,6 +106,14 @@ export default function TeacherDashboard() {
                     ? { ...s, code_content: data.code, language: data.language }
                     : s
             ));
+
+            // Also update the expanded student view if this student is currently maximized
+            setExpandedStudent(prev => {
+                if (prev && prev.id === data.student_id) {
+                    return { ...prev, code_content: data.code, language: data.language };
+                }
+                return prev;
+            });
         };
 
         const handleOutput = (data) => {
