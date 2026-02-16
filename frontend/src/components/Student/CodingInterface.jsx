@@ -197,9 +197,22 @@ export default function CodingInterface() {
     }, [on, off]);
 
 
-    // Register suggestions on editor mount
+    // Register suggestions on editor mount and attach Enter key handler
+    const editorRef = useRef(null);
     const handleEditorDidMount = (editor, monaco) => {
+        editorRef.current = editor;
         registerSuggestions(monaco);
+
+        // Listen for Enter key to sync code with teacher
+        editor.onKeyDown((e) => {
+            if (e.keyCode === monaco.KeyCode.Enter) {
+                // Let Monaco process the Enter first, then send updated code
+                setTimeout(() => {
+                    const currentValue = editor.getValue();
+                    sendCodeChange(currentValue, language, 0);
+                }, 50);
+            }
+        });
     };
 
     // Auto-save code on change (debounced)
@@ -217,18 +230,11 @@ export default function CodingInterface() {
         }
     }, [sessionCode, language]);
 
-    // Handle code changes with debounce
+    // Handle code changes - only update local state and debounce DB save
+    // WebSocket sync happens only on Enter key (see handleEditorKeyDown)
     const handleCodeChange = useCallback((value) => {
         setCode(value);
         lastTypedRef.current = Date.now(); // Track typing time
-
-        // Send real-time update via WebSocket
-        // We use a small timeout to avoid sending on every single keystroke if typing super fast,
-        // but it will feel instant (throttle).
-        // For simplicity and "wow" factor, we can just send it.
-        if (value !== code) {
-            sendCodeChange(value, language, 0);
-        }
 
         // Debounce saving to server (Database persistence)
         if (debounceRef.current) {
@@ -237,7 +243,7 @@ export default function CodingInterface() {
         debounceRef.current = setTimeout(() => {
             saveCode(value);
         }, 1000);
-    }, [saveCode, sendCodeChange, language, code]);
+    }, [saveCode]);
 
     // Handle language change
     const handleLanguageChange = (newLang) => {
