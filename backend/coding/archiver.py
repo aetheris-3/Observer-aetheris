@@ -20,14 +20,19 @@ class ArchiveService:
 
     @staticmethod
     def get_repo_name(session):
-        return f"Observer-Session-{session.session_code}-{topic}"
+        # Sanitize session name
+        s_name = "".join(c for c in session.session_name if c.isalnum() or c in ('-', '_')).strip()
+        return f"Observer-Session-{session.session_code}-{s_name}"
 
     @staticmethod
     def get_file_path(student, language):
         # Format: {StudentName}_{ID}/main.{ext}
         ext_map = {
-            'python': 'py', 'javascript': 'js', 'c': 'c', 
-            'cpp': 'cpp', 'java': 'java'
+            'python': 'py',
+            'javascript': 'js',
+            'c': 'c', 
+            'cpp': 'cpp',
+            'java': 'java'
         }
         ext = ext_map.get(language, 'txt')
         username = "".join(c for c in student.username if c.isalnum() or c in ('-', '_'))
@@ -86,7 +91,7 @@ class ArchiveService:
         return put_res.status_code in [200, 201]
 
     @staticmethod
-    def archive_code_async(session_code, topic, student_username, student_id, code, language):
+    def archive_code_async(session_code, session_name, student_username, student_id, code, language):
         """
         Calculates repo name and path locally to minimize data passed to thread
         """
@@ -96,8 +101,8 @@ class ArchiveService:
             # Here we just use the raw data.
             
             # Repo Name Logic
-            s_topic = "".join(c for c in topic if c.isalnum() or c in ('-', '_')).strip()
-            repo_name = f"Observer-Session-{session_code}-{s_topic}"
+            s_name = "".join(c for c in session_name if c.isalnum() or c in ('-', '_')).strip()
+            repo_name = f"Observer-Session-{session_code}-{s_name}"
             
             # File Path Logic
             ext_map = {'python': 'py', 'javascript': 'js', 'c': 'c', 'cpp': 'cpp', 'java': 'java'}
@@ -106,14 +111,21 @@ class ArchiveService:
             file_path = f"{s_username}_{student_id}/main.{ext}"
 
             # 1. Ensure Repo
+            # Note: ensure_repo_exists is static, so we can call it directly
+            # Logic inside ensure_repo_exists uses requests, which is fine in thread
+            
+            # We need to reimplement ensure_repo_exists logic or make it accept repo_name directly
+            # ensure_repo_exists ALREADY takes repo_name, so this is fine.
             if ArchiveService.ensure_repo_exists(repo_name):
-                # 2. Push Code
-                ArchiveService.push_file(
+                 # 2. Push Code
+                 # We need to fix the call to push_file to match signature (it is static)
+                 ArchiveService.push_file(
                     repo_name, 
                     file_path, 
                     code, 
                     f"Auto-archive: {student_username} update on {language}"
                 )
+
         except Exception as e:
             logger.warning(f"Archiving failed: {e}")
 
@@ -128,6 +140,7 @@ class ArchiveService:
 
         thread = threading.Thread(
             target=ArchiveService.archive_code_async,
-            args=(session.session_code, session.topic, student.username, student.id, code, language)
+            args=(session.session_code, session.session_name, student.username, student.id, code, language)
         )
+
         thread.start()

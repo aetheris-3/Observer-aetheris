@@ -75,6 +75,10 @@ Frontend will be available at `http://localhost:5173`
 ### Quick Start with Docker
 
 ```bash
+#problem only run
+sudo ./run_docker.sh up --build
+
+
 # Clone and navigate to project
 cd caonsoleshare
 

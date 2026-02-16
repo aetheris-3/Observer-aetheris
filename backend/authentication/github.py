@@ -5,10 +5,11 @@ import os
 import requests
 from urllib.parse import urlencode
 
-# GitHub OAuth settings
-GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', 'Ov23liaAfmVZc6YEUtYI')
-GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', 'd6138f02becc866af8c62b89f467eed7ff136f14')
-GITHUB_REDIRECT_URI = os.environ.get('GITHUB_REDIRECT_URI', 'https://compiler-share.onrender.com/api/auth/github/callback/')
+# GitHub OAuth settings — MUST be set via environment variables
+# Never hardcode secrets here. See .env.example for required variables.
+GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', '')
+GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '')
+GITHUB_REDIRECT_URI = os.environ.get('GITHUB_REDIRECT_URI', '')
 
 # GitHub API endpoints
 GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize'

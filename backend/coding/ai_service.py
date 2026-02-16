@@ -51,11 +51,9 @@ class AIService:
                     error_msg += str(e)
                     
                 logger.error(error_msg)
-                print(f"❌ AI ERROR [{provider}]: {error_msg}")
                 errors.append(error_msg)
             except Exception as e:
                 logger.error(f"AI Provider {provider} failed: {str(e)}")
-                print(f"❌ AI ERROR [{provider}]: {str(e)}")
                 errors.append(f"{provider}: {str(e)}")
                 
         return {'error': 'All AI providers failed.', 'details': errors}

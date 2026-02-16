@@ -176,7 +176,7 @@ export default function CodingInterface() {
     // Listen for real-time teacher edits
     useEffect(() => {
         const handleTeacherEdit = (data) => {
-            console.log('Teacher edit received:', data);
+            // Teacher edit received
             // Only update if we haven't typed recently (to avoid overwrite conflict)
             const timeSinceLastTyped = Date.now() - lastTypedRef.current;
             // If user is actively typing, we might show a notification instead of overwriting?

@@ -7,6 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .models import CodingSession, SessionParticipant, CodeSnapshot, ConsoleLog, ErrorNotification
 from .serializers import (
@@ -16,8 +19,11 @@ from .serializers import (
 )
 
 
-class IsTeacher:
-    """Permission mixin to check if user is a teacher."""
+from rest_framework.permissions import BasePermission
+
+
+class IsTeacher(BasePermission):
+    """Permission class to check if user is a teacher."""
     
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'teacher'
@@ -27,12 +33,10 @@ class CreateSessionView(generics.CreateAPIView):
     """Create a new coding session (teacher only)."""
     
     serializer_class = CodingSessionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsTeacher]
     
     def perform_create(self, serializer):
-        if self.request.user.role != 'teacher':
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Only teachers can create sessions.")
+        # Permission already checked by IsTeacher, no need for redundant check
         serializer.save(teacher=self.request.user)
 
 
@@ -276,7 +280,7 @@ class ReportActivityView(APIView):
     
     def post(self, request, session_code):
         activity_type = request.data.get('type')
-        print(f"📍 ReportActivityView: session={session_code}, type={activity_type}, user={request.user}")  # DEBUG
+        logger.debug(f"📍 ReportActivityView: session={session_code}, type={activity_type}, user={request.user}")
         
         if not activity_type:
             return Response(
@@ -288,7 +292,7 @@ class ReportActivityView(APIView):
         
         # If user is the teacher, just log it but don't error
         if request.user == session.teacher:
-             print("ℹ️ Teacher reported activity, ignoring participant check")
+             logger.info("ℹ️ Teacher reported activity, ignoring participant check")
              return Response({'status': 'reported (teacher)'})
 
         # Verify student is participant
@@ -303,7 +307,7 @@ class ReportActivityView(APIView):
         from asgiref.sync import async_to_sync
         
         channel_layer = get_channel_layer()
-        print(f"📤 Broadcasting to session_{session_code}")  # DEBUG
+        logger.debug(f"📤 Broadcasting to session_{session_code}")
         async_to_sync(channel_layer.group_send)(
             f'session_{session_code}',
             {
@@ -313,7 +317,7 @@ class ReportActivityView(APIView):
                 'timestamp': timezone.now().isoformat()
             }
         )
-        print(f"✅ Broadcast complete")  # DEBUG
+        logger.debug(f"✅ Broadcast complete")
         
         return Response({'status': 'reported'})
 

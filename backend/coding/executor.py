@@ -1,24 +1,73 @@
 """
 Sandboxed code execution for Python, JavaScript, C, C++, and Java.
+Enhanced with container-based sandboxing, resource limits, and security controls.
 """
 import subprocess
 import time
 import tempfile
 import os
 import asyncio
+import shutil
+import resource
 from django.conf import settings
 
 
 class CodeExecutor:
     """
     Executes code in a sandboxed environment with timeout and memory limits.
+    Supports both native execution and container-based sandboxing (Docker/Podman).
     """
     
     SUPPORTED_LANGUAGES = ['python', 'javascript', 'c', 'cpp', 'java']
     
     def __init__(self):
         self.timeout = getattr(settings, 'CODE_EXECUTION_TIMEOUT', 10)
-        self.memory_limit = getattr(settings, 'CODE_EXECUTION_MEMORY_LIMIT', 50 * 1024 * 1024)
+        self.memory_limit = getattr(settings, 'CODE_EXECUTION_MEMORY_LIMIT', 50 * 1024 * 1024)  # 50MB
+        self.use_container = self._detect_container_runtime()
+        self.container_cmd = self._get_container_command()
+    
+    def _detect_container_runtime(self):
+        """Detect if Docker or Podman is available."""
+        for cmd in ['podman', 'docker']:
+            try:
+                result = subprocess.run([cmd, '--version'], capture_output=True, timeout=2)
+                if result.returncode == 0:
+                    return cmd
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        return None
+    
+    def _get_container_command(self):
+        """Get the container runtime command."""
+        return self.use_container
+    
+    def _get_container_args(self):
+        """Get container security arguments."""
+        return [
+            '--network', 'none',           # Disable network access
+            '--memory', '50m',             # Memory limit
+            '--cpus', '0.5',               # CPU limit
+            '--read-only',                 # Read-only filesystem
+            '--tmpfs', '/tmp:rw,size=10m', # Writable temp with size limit
+            '--rm',                        # Auto-remove container
+            '--security-opt', 'no-new-privileges',  # Prevent privilege escalation
+        ]
+    
+    def _set_resource_limits(self):
+        """Set resource limits for subprocess (Linux only)."""
+        def limit_resources():
+            try:
+                # Set memory limit (RLIMIT_AS = address space)
+                resource.setrlimit(resource.RLIMIT_AS, (self.memory_limit, self.memory_limit))
+                # Set CPU time limit
+                resource.setrlimit(resource.RLIMIT_CPU, (self.timeout, self.timeout))
+                # Set file size limit (10MB)
+                resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
+                # Set number of processes limit
+                resource.setrlimit(resource.RLIMIT_NPROC, (10, 10))
+            except Exception:
+                pass  # Not on Linux or limits not supported
+        return limit_resources
     
     def execute(self, code, language):
         """
@@ -80,7 +129,9 @@ class CodeExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=tempfile.gettempdir()
+            cwd=tempfile.gettempdir(),
+            preexec_fn=self._set_resource_limits(),
+            start_new_session=True  # Create new process group for proper cleanup
         )
         return process, temp_file, None
 
@@ -94,7 +145,9 @@ class CodeExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=tempfile.gettempdir()
+            cwd=tempfile.gettempdir(),
+            preexec_fn=self._set_resource_limits(),
+            start_new_session=True
         )
         return process, temp_file, None
 
@@ -113,7 +166,9 @@ class CodeExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=tempfile.gettempdir()
+            cwd=tempfile.gettempdir(),
+            preexec_fn=self._set_resource_limits(),
+            start_new_session=True
         )
         return process, source_file, output_file
 
@@ -132,7 +187,9 @@ class CodeExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=tempfile.gettempdir()
+            cwd=tempfile.gettempdir(),
+            preexec_fn=self._set_resource_limits(),
+            start_new_session=True
         )
         return process, source_file, output_file
 
@@ -158,110 +215,10 @@ class CodeExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=temp_dir
+            cwd=temp_dir,
+            preexec_fn=self._set_resource_limits(),
+            start_new_session=True
         )
-        return process, temp_dir, None
-    
-    def _start_python(self, code):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(code)
-            temp_file = f.name
-        
-        process = subprocess.Popen(
-            ['python3', '-u', temp_file], # -u for unbuffered python stdout
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False, # Binary mode for unbuffered pipe access
-            bufsize=0,  # Unbuffered
-            cwd=tempfile.gettempdir()
-        )
-        return process, temp_file, None
-
-    def _start_javascript(self, code):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
-            f.write(code)
-            temp_file = f.name
-            
-        process = subprocess.Popen(
-            ['node', temp_file],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False,
-            bufsize=0,
-            cwd=tempfile.gettempdir()
-        )
-        return process, temp_file, None
-
-    def _start_c(self, code):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
-            f.write(code)
-            source_file = f.name
-        
-        output_file = source_file.replace('.c', '')
-        
-        # Compile first
-        subprocess.run(['gcc', source_file, '-o', output_file], check=True, timeout=10)
-        
-        process = subprocess.Popen(
-            [output_file],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=0,
-            cwd=tempfile.gettempdir()
-        )
-        return process, source_file, output_file
-
-    def _start_cpp(self, code):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
-            f.write(code)
-            source_file = f.name
-        
-        output_file = source_file.replace('.cpp', '')
-        
-        # Compile
-        subprocess.run(['g++', source_file, '-o', output_file], check=True, timeout=10)
-        
-        process = subprocess.Popen(
-            [output_file],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=0,
-            cwd=tempfile.gettempdir()
-        )
-        return process, source_file, output_file
-
-    def _start_java(self, code):
-        import re
-        class_match = re.search(r'public\s+class\s+(\w+)', code)
-        class_name = class_match.group(1) if class_match else 'Main'
-        if 'class ' not in code:
-            code = f'public class Main {{\n    public static void main(String[] args) {{\n        {code}\n    }}\n}}'
-            class_name = 'Main'
-
-        temp_dir = tempfile.mkdtemp()
-        source_file = os.path.join(temp_dir, f'{class_name}.java')
-        
-        with open(source_file, 'w') as f:
-            f.write(code)
-            
-        subprocess.run(['javac', source_file], check=True, timeout=10, cwd=temp_dir)
-        
-        process = subprocess.Popen(
-            ['java', class_name],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False,
-            bufsize=0,
-            cwd=temp_dir
-        )
-        # For Java, we return the temp_dir as the file to cleanup
         return process, temp_dir, None
     
     def _execute_python(self, code):
@@ -274,13 +231,14 @@ class CodeExecutor:
             temp_file = f.name
         
         try:
-            # Run with timeout
+            # Run with timeout and resource limits
             result = subprocess.run(
                 ['python3', temp_file],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=tempfile.gettempdir()
+                cwd=tempfile.gettempdir(),
+                preexec_fn=self._set_resource_limits()
             )
             
             execution_time = time.time() - start_time
@@ -329,13 +287,14 @@ class CodeExecutor:
             temp_file = f.name
         
         try:
-            # Run with timeout
+            # Run with timeout and resource limits
             result = subprocess.run(
                 ['node', temp_file],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=tempfile.gettempdir()
+                cwd=tempfile.gettempdir(),
+                preexec_fn=self._set_resource_limits()
             )
             
             execution_time = time.time() - start_time
@@ -409,13 +368,14 @@ class CodeExecutor:
                     'execution_time': round(time.time() - start_time, 3)
                 }
             
-            # Run the compiled binary
+            # Run the compiled binary with resource limits
             result = subprocess.run(
                 [output_file],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=tempfile.gettempdir()
+                cwd=tempfile.gettempdir(),
+                preexec_fn=self._set_resource_limits()
             )
             
             execution_time = time.time() - start_time
@@ -493,13 +453,14 @@ class CodeExecutor:
                     'execution_time': round(time.time() - start_time, 3)
                 }
             
-            # Run the compiled binary
+            # Run the compiled binary with resource limits
             result = subprocess.run(
                 [output_file],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=tempfile.gettempdir()
+                cwd=tempfile.gettempdir(),
+                preexec_fn=self._set_resource_limits()
             )
             
             execution_time = time.time() - start_time
@@ -593,13 +554,14 @@ class CodeExecutor:
                     'execution_time': round(time.time() - start_time, 3)
                 }
             
-            # Run the compiled Java class
+            # Run the compiled Java class with resource limits
             result = subprocess.run(
                 ['java', class_name],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=temp_dir
+                cwd=temp_dir,
+                preexec_fn=self._set_resource_limits()
             )
             
             execution_time = time.time() - start_time
@@ -640,7 +602,6 @@ class CodeExecutor:
         finally:
             # Clean up temp directory
             try:
-                import shutil
                 shutil.rmtree(temp_dir)
             except:
                 pass

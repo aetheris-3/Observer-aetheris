@@ -18,17 +18,27 @@ cleanup() {
 # Trap Ctrl+C and termination signals
 trap cleanup SIGINT SIGTERM
 
-# Start Backend
-# Export environment variables for local development
-export DATABASE_URL="sqlite:///db.sqlite3"
-export DJANGO_SECRET_KEY="django-insecure-dev-key"
-export DEBUG="True"
-export ALLOWED_HOSTS="localhost,127.0.0.1,0.0.0.0"
+# Load environment variables from .env file
+if [ -f .env ]; then
+    echo -e "${GREEN}Loading .env file...${NC}"
+    set -a
+    source .env
+    set +a
+else
+    echo -e "${BLUE}No .env file found. Using defaults (create one from .env.example for GitHub OAuth).${NC}"
+fi
 
-# GitHub OAuth Settings (REPLACE THESE WITH YOUR OWN)
-export GITHUB_CLIENT_ID="Ov23li5UwiufLxZ6Y1EQ"
-export GITHUB_CLIENT_SECRET="8a41855d69c082437df197a525eb00aebab3b943"
-export GITHUB_REDIRECT_URI="http://localhost:8001/api/auth/github/callback/"
+# Set development defaults (only if not already set by .env)
+export DATABASE_URL="${DATABASE_URL:-sqlite:///db.sqlite3}"
+export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-django-insecure-dev-key}"
+export DEBUG="${DEBUG:-True}"
+export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}"
+export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
+
+# GitHub OAuth — MUST be set in .env file (no hardcoded secrets)
+if [ -z "$GITHUB_CLIENT_ID" ]; then
+    echo -e "${BLUE}⚠ GITHUB_CLIENT_ID not set — GitHub OAuth will not work. Add it to .env${NC}"
+fi
 
 echo -e "${GREEN}Starting Backend (Django)...${NC}"
 source venv/bin/activate

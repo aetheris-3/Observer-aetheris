@@ -4,12 +4,14 @@ Handles bidirectional communication between teachers and students.
 """
 import json
 import asyncio
+import logging
 from datetime import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class CodingConsumer(AsyncWebsocketConsumer):
@@ -31,7 +33,7 @@ class CodingConsumer(AsyncWebsocketConsumer):
         self.session_group_name = f'session_{self.session_code}'
         self.user = self.scope.get('user')
         self.is_connected = False
-        print(f"🔌 WebSocket Connect: code={self.session_code}, user={self.user}") # DEBUG
+        logger.info(f"🔌 WebSocket Connect: code={self.session_code}, user={self.user}")
         
         # Check if user is authenticated
         user_data = await self.get_user_data()
@@ -245,9 +247,9 @@ class CodingConsumer(AsyncWebsocketConsumer):
             }
         )
         
+        
         # If error, do NOT create error notification automatically
-        # if not result['success']:
-        #     await self.create_error_notification(result.get('error', ''))
+        # Automatic error notification creation disabled in favor of manual notifications
 
     async def handle_student_notification(self, data):
         """Handle manual notification from student."""
@@ -379,11 +381,11 @@ class CodingConsumer(AsyncWebsocketConsumer):
     
     async def student_activity(self, event):
         """Send student activity update to teachers."""
-        print(f"🔔 student_activity received: {event}")  # DEBUG
+        # logger.debug(f"🔔 student_activity received: {event}")
         user_data = await self.get_user_data()
-        print(f"👤 User data: {user_data}")  # DEBUG
+        # logger.debug(f"👤 User data: {user_data}")
         if user_data and user_data['role'] == 'teacher':
-            print(f"✅ Sending to teacher: {event}")  # DEBUG
+            # logger.debug(f"✅ Sending to teacher: {event}")
             await self.safe_send(event)
 
     async def student_alert(self, event):
@@ -541,6 +543,12 @@ class InteractiveExecutionConsumer(AsyncWebsocketConsumer):
     WebSocket consumer for interactive code execution (Terminal-like).
     """
     async def connect(self):
+        self.user = self.scope.get('user')
+        if not self.user or not self.user.is_authenticated:
+            # Reject connection for unauthenticated users
+            await self.close(code=4001)
+            return
+
         await self.accept()
         self.process = None
         self.files_to_cleanup = []
@@ -549,12 +557,19 @@ class InteractiveExecutionConsumer(AsyncWebsocketConsumer):
         if self.process:
             try:
                 self.process.terminate()
-                self.process.wait(timeout=1)
-            except:
+                # Fixed: Use async wait_for instead of blocking wait()
                 try:
-                    self.process.kill()
-                except:
-                    pass
+                    await asyncio.wait_for(self.process.wait(), timeout=1)
+                except asyncio.TimeoutError:
+                    # Kill process group to ensure child processes are terminated
+                    try:
+                        import os
+                        import signal
+                        os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                    except:
+                        self.process.kill()
+            except:
+                pass
         
         # Cleanup files
         import shutil
@@ -623,17 +638,32 @@ class InteractiveExecutionConsumer(AsyncWebsocketConsumer):
             stdout_task = asyncio.create_task(self.read_stream(process.stdout, "stdout"))
             stderr_task = asyncio.create_task(self.read_stream(process.stderr, "stderr"))
 
-            # Wait for process to finish
-            return_code = await process.wait()
-            
-            # Wait for output to be fully read
-            await asyncio.gather(stdout_task, stderr_task)
+            # Wait for process to finish with timeout (30 seconds)
+            try:
+                return_code = await asyncio.wait_for(process.wait(), timeout=30)
+                
+                # Wait for output to be fully read
+                await asyncio.gather(stdout_task, stderr_task)
 
-            await self.send(text_data=json.dumps({
-                "type": "status",
-                "status": "finished",
-                "exit_code": return_code
-            }))
+                await self.send(text_data=json.dumps({
+                    "type": "status",
+                    "status": "finished",
+                    "exit_code": return_code
+                }))
+            except asyncio.TimeoutError:
+                # Kill process group to ensure child processes are terminated
+                try:
+                    import os
+                    import signal
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except:
+                    process.kill()
+                
+                await self.send(text_data=json.dumps({
+                    "type": "status",
+                    "status": "timeout",
+                    "message": "Execution timeout (30s exceeded)"
+                }))
 
         except Exception as e:
             await self.send(text_data=json.dumps({
@@ -668,13 +698,13 @@ class InteractiveExecutionConsumer(AsyncWebsocketConsumer):
     async def send_input(self, input_text):
         if self.process and self.process.stdin:
             try:
-                print(f"DEBUG: Writing input to process: {repr(input_text)}")
+                logger.debug(f"Writing input to process: {repr(input_text)}")
                 # Encode text to bytes
                 input_bytes = input_text.encode('utf-8')
                 self.process.stdin.write(input_bytes) # write is not async in asyncio subprocess
                 await self.process.stdin.drain()      # flush using drain
-                print("DEBUG: Input written and drained")
+                logger.debug("Input written and drained")
             except Exception as e:
-                print(f"DEBUG: Error writing input: {e}")
+                logger.error(f"Error writing input: {e}")
                 pass
 

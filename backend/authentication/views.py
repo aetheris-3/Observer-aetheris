@@ -324,10 +324,18 @@ class TeacherSettingsView(APIView):
             
         settings, _ = TeacherSettings.objects.get_or_create(user=request.user)
         
+        def mask_api_key(key):
+            """Mask API key, showing only last 4 characters."""
+            if not key:
+                return ''
+            if len(key) <= 4:
+                return '****'
+            return '*' * (len(key) - 4) + key[-4:]
+        
         return Response({
-            'openai_api_key': settings.openai_api_key,
-            'gemini_api_key': settings.gemini_api_key,
-            'groq_api_key': settings.groq_api_key,
+            'openai_api_key': mask_api_key(settings.openai_api_key),
+            'gemini_api_key': mask_api_key(settings.gemini_api_key),
+            'groq_api_key': mask_api_key(settings.groq_api_key),
             'is_ai_active': settings.is_ai_active
         })
         

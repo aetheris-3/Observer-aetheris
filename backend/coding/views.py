@@ -73,13 +73,7 @@ class ExecuteCodeView(APIView):
                 )
             
             # Error notification creation disabled - manual only
-            # if not result.get('success') and result.get('error'):
-            #     ErrorNotification.objects.create(
-            #         session=session,
-            #         student=request.user,
-            #         error_message=result.get('error'),
-            #         is_read=False
-            #     )
+            # Automatic Error notification creation disabled in favor of manual notifications
         
         return Response(result)
 
@@ -94,6 +88,14 @@ class SaveCodeView(APIView):
         code = request.data.get('code', '')
         language = request.data.get('language', 'python')
         session_code = request.data.get('session_code', '')
+        
+        # Validate code size (max 1MB to prevent massive payloads)
+        MAX_CODE_SIZE = 1024 * 1024  # 1MB
+        if len(code.encode('utf-8')) > MAX_CODE_SIZE:
+            return Response(
+                {'error': f'Code size exceeds maximum allowed size of {MAX_CODE_SIZE // 1024}KB'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
         
         if not session_code:
             return Response(
@@ -213,6 +215,14 @@ class TeacherSaveCodeView(APIView):
         code = request.data.get('code', '')
         language = request.data.get('language', 'python')
         session_code = request.data.get('session_code', '')
+        
+        # Validate code size (max 1MB to prevent massive payloads)
+        MAX_CODE_SIZE = 1024 * 1024  # 1MB
+        if len(code.encode('utf-8')) > MAX_CODE_SIZE:
+            return Response(
+                {'error': f'Code size exceeds maximum allowed size of {MAX_CODE_SIZE // 1024}KB'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
         
         if not session_code or not student_id:
             return Response(

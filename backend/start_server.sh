@@ -5,24 +5,24 @@
 # ==========================================
 
 # ------------------------------------------
-# 1. ADMIN CONFIGURATION (REQUIRED)
+# 1. ADMIN CONFIGURATION
 # ------------------------------------------
-# Enter your GitHub username here
-export GITHUB_ADMIN_USERNAME="Sumit785-dot"
-
-# Enter your GitHub Personal Access Token here
-# HOW TO GET TOKEN:
-# 1. Go to GitHub Settings -> Developer Settings -> Personal access tokens -> Tokens (classic)
-# 2. Generate new token
-# 3. Select 'repo' scope (Full control of private repositories)
-# 4. Copy the token and paste it below
-export GITHUB_ADMIN_TOKEN="YOUR_GITHUB_TOKEN_HERE"
+# All configuration is loaded from ../.env file.
+# See .env.example for required variables.
+#
+# GitHub Admin credentials (for session archiving):
+#   GITHUB_ADMIN_USERNAME — Your GitHub username
+#   GITHUB_ADMIN_TOKEN    — Personal Access Token with 'repo' scope
+#     HOW TO GET TOKEN:
+#     1. Go to GitHub Settings -> Developer Settings -> Personal access tokens -> Tokens (classic)
+#     2. Generate new token
+#     3. Select 'repo' scope (Full control of private repositories)
+#     4. Add it to your .env file
 
 # ------------------------------------------
 # 2. START SERVER
 # ------------------------------------------
 echo "Starting Observer Backend..."
-echo "Admin User: $GITHUB_ADMIN_USERNAME"
 
 
 
@@ -33,11 +33,21 @@ cd "$(dirname "$0")"
 # Start Database (Docker directly)
 echo "Starting Database..."
 
-# Load environment variables from .env if present (used for docker container too)
+# Load environment variables from .env if present
 if [ -f ../.env ]; then
+    echo "Loading .env file..."
     set -a
     source ../.env
     set +a
+else
+    echo "⚠ No .env file found. Copy .env.example to .env and fill in your values."
+fi
+
+# Validate admin config
+if [ -n "$GITHUB_ADMIN_USERNAME" ]; then
+    echo "Admin User: $GITHUB_ADMIN_USERNAME"
+else
+    echo "⚠ GITHUB_ADMIN_USERNAME not set — session archiving will be disabled."
 fi
 
 DB_USER=${POSTGRES_USER:-consoleshare_user}
@@ -59,15 +69,7 @@ docker run -d \
     -v postgres_data:/var/lib/postgresql/data \
     postgres:15-alpine
 
-# Load environment variables from .env if present
-if [ -f ../.env ]; then
-    set -a
-    source ../.env
-    set +a
-fi
-
-# Force connection to local Docker DB (overriding potentially incorrect .env port)
-# Use credentials from .env but force localhost:5434
+# Use credentials from .env but force localhost:5434 for local Docker DB
 export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5434/${DB_NAME}"
 
 # Build Frontend
