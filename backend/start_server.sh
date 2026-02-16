@@ -30,7 +30,7 @@ echo "Admin User: $GITHUB_ADMIN_USERNAME"
 # Ensure we are in the backend directory
 cd "$(dirname "$0")"
 
-# Start Database (Docker/Podman directly)
+# Start Database (Docker directly)
 echo "Starting Database..."
 
 # Load environment variables from .env if present (used for docker container too)
