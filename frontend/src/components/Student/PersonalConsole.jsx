@@ -32,13 +32,14 @@ export default function PersonalConsole() {
     const [language, setLanguage] = useState('python');
     const [output, setOutput] = useState([]);
     const [isRunning, setIsRunning] = useState(false);
-    const [socket, setSocket] = useState(null);
     const [filename, setFilename] = useState('main.py');
+    const [socket, setSocket] = useState(null);
 
     // WebSocket connection logic
     const connect = useCallback(() => {
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/execute/`;
+        const token = localStorage.getItem('accessToken');
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/execute/${token ? `?token=${token}` : ''}`;
         const newSocket = new WebSocket(wsUrl);
 
         newSocket.onopen = () => {
@@ -50,7 +51,7 @@ export default function PersonalConsole() {
             if (data.type === 'status') {
                 if (data.status === 'started') {
                     setIsRunning(true);
-                    setOutput([]); // Clear previous output
+                    setOutput([]);
                 } else if (data.status === 'finished') {
                     setIsRunning(false);
                     setOutput(prev => [...prev, {
@@ -64,14 +65,12 @@ export default function PersonalConsole() {
             } else if (data.type === 'output') {
                 setOutput(prev => {
                     const last = prev[prev.length - 1];
-                    // If last item is same stream type and marked as stream, append to it
                     if (last && last.type === (data.stream === 'stderr' ? 'error' : 'output') && last.isStream) {
                         return [
                             ...prev.slice(0, -1),
                             { ...last, message: last.message + data.data }
                         ];
                     }
-                    // Otherwise create new item
                     return [...prev, {
                         type: data.stream === 'stderr' ? 'error' : 'output',
                         message: data.data,
@@ -92,10 +91,6 @@ export default function PersonalConsole() {
         newSocket.onclose = () => {
             console.log('Disconnected from execution server, retrying in 3s...');
             setIsRunning(false);
-            // Optionally notify user of disconnection if needed, but for auto-reconnect maybe stay silent or subtle
-            // setOutput(prev => [...prev, { type: 'info', message: '\nDisconnected.. Reconnecting...', timestamp: new Date().toISOString() }]);
-
-            // Auto-reconnect after 3 seconds
             setTimeout(() => {
                 connect();
             }, 3000);
@@ -107,29 +102,20 @@ export default function PersonalConsole() {
     // Initial connection
     useEffect(() => {
         connect();
-        return () => {
-            // We can't easily clean up the recursive timeout/socket structure in this simple useEffect 
-            // without refs, but for this component lifecycle it's acceptable.
-            // Ideally we'd close the socket here, but that triggers onclose and reconnects.
-            // For now, let's rely on browser garbage collection or simple close.
-            // To prevent infinite reconnects on unmount, we could use a ref to track mounted state.
-        };
     }, [connect]);
 
     // Handle user input from console
     const handleConsoleInput = (inputText) => {
         if (socket && socket.readyState === WebSocket.OPEN) {
-            // Echo input to console immediately
             setOutput(prev => [...prev, {
-                type: 'output', // render as normal output
+                type: 'output',
                 message: inputText + '\n',
                 timestamp: new Date().toISOString(),
-                isStream: false // Treat as a complete block or adjust if needed
+                isStream: false
             }]);
-
             socket.send(JSON.stringify({
                 type: 'input',
-                input: inputText + '\n' // Append newline as Enter key usually sends it
+                input: inputText + '\n'
             }));
         }
     };
@@ -193,16 +179,15 @@ export default function PersonalConsole() {
     }, []);
 
     // Run code using WebSocket
-    const runCode = async () => {
+    const runCode = () => {
         if (!socket || socket.readyState !== WebSocket.OPEN) {
-            // Attempt immediate reconnect if possible, or just alert
-            alert('Reconnecting to server... Please wait a moment and try again.');
-            connect(); // Trigger manual reconnect attempt
+            alert('Connecting to server... Please wait a moment and try again.');
+            connect();
             return;
         }
 
         setIsRunning(true);
-        setOutput([]); // Clear console
+        setOutput([]);
 
         socket.send(JSON.stringify({
             type: 'run',
@@ -229,7 +214,7 @@ export default function PersonalConsole() {
     // Connect GitHub account
     const connectGitHub = async () => {
         try {
-            const response = await githubAPI.getAuthUrl('/console');
+            const response = await githubAPI.getAuthUrl('/personal-console');
             window.location.href = response.data.auth_url;
         } catch (error) {
             console.error('Failed to get GitHub auth URL:', error);
@@ -262,7 +247,8 @@ export default function PersonalConsole() {
     };
 
     // Push code to GitHub
-    const pushToGitHub = async () => {
+    const pushToGitHub = async (e) => {
+        if (e) e.preventDefault();
         if (!selectedRepo || !githubFilename) return;
 
         setIsPushing(true);
@@ -291,7 +277,8 @@ export default function PersonalConsole() {
     };
 
     // Create new GitHub repo
-    const createNewRepo = async () => {
+    const createNewRepo = async (e) => {
+        if (e) e.preventDefault();
         if (!newRepoName.trim()) return;
 
         setIsCreatingRepo(true);
@@ -584,7 +571,11 @@ export default function PersonalConsole() {
                                             ))}
                                         </select>
                                         <button
-                                            onClick={() => setShowCreateRepo(true)}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                setShowCreateRepo(true);
+                                            }}
                                             className="text-sm text-blue-400 hover:text-blue-300 mt-2"
                                         >
                                             + Create New Repository
@@ -607,12 +598,17 @@ export default function PersonalConsole() {
                                     {/* Push Buttons */}
                                     <div className="flex justify-end gap-3 pt-4">
                                         <button
-                                            onClick={() => setShowGithubModal(false)}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                setShowGithubModal(false);
+                                            }}
                                             className="btn btn-secondary"
                                         >
                                             Cancel
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={pushToGitHub}
                                             disabled={!selectedRepo || !githubFilename || isPushing}
                                             className="btn btn-primary disabled:opacity-50"
@@ -651,12 +647,17 @@ export default function PersonalConsole() {
                                     {/* Create Buttons */}
                                     <div className="flex justify-end gap-3 pt-4">
                                         <button
-                                            onClick={() => setShowCreateRepo(false)}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                setShowCreateRepo(false);
+                                            }}
                                             className="btn btn-secondary"
                                         >
                                             Back
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={createNewRepo}
                                             disabled={!newRepoName.trim() || isCreatingRepo}
                                             className="btn btn-primary disabled:opacity-50"

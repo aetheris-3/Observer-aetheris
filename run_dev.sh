@@ -25,6 +25,11 @@ export DJANGO_SECRET_KEY="django-insecure-dev-key"
 export DEBUG="True"
 export ALLOWED_HOSTS="localhost,127.0.0.1,0.0.0.0"
 
+# GitHub OAuth Settings (REPLACE THESE WITH YOUR OWN)
+export GITHUB_CLIENT_ID="Ov23li5UwiufLxZ6Y1EQ"
+export GITHUB_CLIENT_SECRET="8a41855d69c082437df197a525eb00aebab3b943"
+export GITHUB_REDIRECT_URI="http://localhost:8001/api/auth/github/callback/"
+
 echo -e "${GREEN}Starting Backend (Django)...${NC}"
 source venv/bin/activate
 python backend/manage.py runserver 0.0.0.0:8001 &
