@@ -54,12 +54,12 @@ export function WebSocketProvider({ children }) {
             setSessionCode(code);
             reconnectAttempts.current = 0;
 
-            // Start heartbeat
+            // Start heartbeat (keep connection alive)
             heartbeatInterval.current = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'heartbeat' }));
                 }
-            }, 30000);
+            }, 60000); // 60s heartbeat (reduced from 30s)
         };
 
         ws.onmessage = (event) => {

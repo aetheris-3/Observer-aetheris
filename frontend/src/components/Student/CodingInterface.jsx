@@ -113,7 +113,7 @@ export default function CodingInterface() {
         loadSession();
     }, [sessionCode, navigate]);
 
-    // Heartbeat and poll for teacher edits every 5 seconds
+    // Heartbeat and poll for teacher edits every 15 seconds
     useEffect(() => {
         if (!sessionCode) return;
 
@@ -163,8 +163,8 @@ export default function CodingInterface() {
         // Initial poll
         pollAndHeartbeat();
 
-        // Poll every 5 seconds
-        heartbeatRef.current = setInterval(pollAndHeartbeat, 5000);
+        // Poll every 15 seconds (reduced from 5s to lower server load)
+        heartbeatRef.current = setInterval(pollAndHeartbeat, 15000);
 
         return () => {
             if (heartbeatRef.current) {
@@ -242,7 +242,7 @@ export default function CodingInterface() {
         }
         debounceRef.current = setTimeout(() => {
             saveCode(value);
-        }, 1000);
+        }, 3000); // Debounce 3s (reduced from 1s to lower server load)
     }, [saveCode]);
 
     // Handle language change

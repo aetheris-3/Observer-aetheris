@@ -92,8 +92,8 @@ export default function TeacherDashboard() {
             }
         };
 
-        // Poll every 10 seconds (WebSocket handles real-time, this is fallback)
-        const interval = setInterval(pollData, 10000);
+        // Poll every 30 seconds (WebSocket handles real-time, this is just a fallback)
+        const interval = setInterval(pollData, 30000);
 
         return () => clearInterval(interval);
     }, [sessionCode]);

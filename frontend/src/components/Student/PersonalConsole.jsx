@@ -89,11 +89,11 @@ export default function PersonalConsole() {
         };
 
         newSocket.onclose = () => {
-            console.log('Disconnected from execution server, retrying in 3s...');
+            console.log('Disconnected from execution server, retrying in 10s...');
             setIsRunning(false);
             setTimeout(() => {
                 connect();
-            }, 3000);
+            }, 10000); // Reconnect after 10s (reduced from 3s)
         };
 
         setSocket(newSocket);
